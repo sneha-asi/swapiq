@@ -145,6 +145,18 @@ The initial buyer is a mid-market retailer or D2C brand, in food or beauty, that
 - Visualize a product-centered graph.
 - Return recall impact from a focused ingredient or material query.
 
+### Returns and exchange
+
+- Run the same safety traversal as substitution, triggered by a return instead of a stockout.
+- Turn the return reason into an added constraint: a reported reaction infers and excludes the culprit conflict class, a quality issue excludes the brand, a dislike excludes the item and down-ranks its brand.
+- Never propose an exchange that violates the shopper's profile or the newly inferred constraint; when a reaction has no identifiable culprit ingredient, flag for review rather than guess.
+
+### Observability
+
+- Trace the LLM ranking call end to end when a LangSmith key is present: inputs, output, latency, and which path (Claude or deterministic fallback) ran.
+- Add zero overhead and change no behavior when the key is absent.
+- Flush traces before the serverless function returns.
+
 ## 8. Success metrics
 
 | Area | Metric |

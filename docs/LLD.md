@@ -133,7 +133,18 @@ This is the hard safety boundary. Blocked candidates never reach Layer 2 or the 
 
 **Observability.** When `LANGSMITH_API_KEY` is present, `rank_and_explain` is wrapped as a LangSmith trace (`swapiq.rank_and_explain`) with the Claude call nested inside via `wrap_anthropic`, capturing inputs, output, latency and which path ran (`claude` vs `fallback`). Traces are flushed before the serverless function returns, since Vercel may freeze the process between invocations. This is the single LLM touchpoint in the system, so one trace captures all model behavior; it is also where a guardrail eval (never recommend an item the graph did not clear, never leak margin/cost to the shopper) would attach.
 
-## 8. Learning loop
+## 8. Returns and exchange (post-purchase)
+
+`POST /api/return-offer` reuses the same Layer-1 safety traversal and Layer-2 ranking as substitution, triggered by a return instead of a stockout, with one input a stockout never has: a return reason (`RETURN_REASONS`) that becomes an extra constraint on the safe set.
+
+- **reacted**: infer that the returned item's ingredient conflict-classes are the likely culprit, add them to the shopper's `avoids_allergens`, and graph-block every candidate that shares them. This is the graph *learning a new safety constraint from behavior*, not reading it from the saved profile. If the returned item has no declared conflict ingredient, the response says so and flags for review rather than guessing a culprit.
+- **quality**: exclude the returned brand.
+- **disliked**: exclude the returned product and down-rank its brand (`weight * 0.7`).
+- **wrong_item**: a straightforward safe alternative in the same category.
+
+The response carries the inferred constraint, an honest customer-facing note explaining it, and the same `safe_count` / `blocked_count` / `unavailable_count` contract as `swap-offer`. Returns is the clearest proof that the safety graph is a reusable primitive, not a lookup: the same traversal that resolves a stockout also encodes a newly learned personal constraint.
+
+## 9. Learning loop
 
 `updated_weight(old, accepted, lr=0.25)` uses bounded exponential updates:
 
@@ -144,7 +155,7 @@ decline: new = old - 0.25 * old
 
 The browser persists `{edge_key: {weight, decisions}}` and passes it to the offer, graph and decision endpoints. Server-side storage is omitted in the demo; production moves this to tenant/store-scoped storage.
 
-## 9. ListingIQ rule engine
+## 10. ListingIQ rule engine
 
 Separates decision from language, the same principle as the two-layer model:
 
@@ -153,11 +164,11 @@ Separates decision from language, the same principle as the two-layer model:
 3. `/api/audit` returns score, severity, rule ID, evidence and fix.
 4. `/api/fix` asks Claude to rewrite the listing; the deterministic findings remain authoritative, and a fallback rewrite keeps it working offline. Runs across both verticals with no rule changes.
 
-## 10. Recall propagation
+## 11. Recall propagation
 
 `GET /api/recall?ingredient=<name>` returns the linked SKUs, categories, listing count, mapped allergen and at-risk shopper profiles. Neo4j executes the ingredient-to-product/category/allergen traversal in Cypher; NetworkX implements the same contract from in-memory facts.
 
-## 11. API contract
+## 12. API contract
 
 | Method | Endpoint | Purpose |
 |---|---|---|
@@ -177,7 +188,7 @@ Separates decision from language, the same principle as the two-layer model:
 
 `safe`, `blocked` and `unavailable` counts always sum to `checked`. `swap-offer` candidates carry `signals` (customer-facing) and `business` (operator-facing) separately.
 
-## 12. Frontend
+## 13. Frontend
 
 ### Cartly (`public/index.html`)
 
@@ -191,10 +202,10 @@ Catalog-wide QA scoreboard with severity tiles and a per-listing report (finding
 
 Operator front door: a simulated store-connection flow with a live-building graph, platform and business/operations metrics, recall propagation, the graph explorer, and links to the store and ListingIQ as apps on the shared graph.
 
-## 13. Tests
+## 14. Tests
 
 `tests/test_graph_backend.py` asserts the NetworkX and Neo4j backends return identical safe/blocked sets and identical graph counts, so the fallback is a true parity implementation, not an approximation.
 
-## 14. Planned (see PRD Section 11)
+## 15. Planned (see PRD Section 11)
 
-A third compatibility-shaped vertical (electronics), an explicit config-driven attribute schema, and time-series console insights. (Post-purchase returns/exchange, previously listed here, has shipped and is documented in Sections 11 and 12.)
+A third compatibility-shaped vertical (electronics), an explicit config-driven attribute schema, and time-series console insights. (Post-purchase returns/exchange, previously listed here, has shipped and is documented in Sections 12 and 13.)
