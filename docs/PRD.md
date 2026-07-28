@@ -9,7 +9,7 @@ SwapIQ is the trust-and-safety graph layer for ecommerce catalogs, the layer any
 
 Every retail category has its own version of the same problem: a product has attributes that can conflict with what a buyer needs, or with a rule a regulator or marketplace imposes, and today that check is either skipped or done by hand. Grocery calls the attribute an "allergen." Skincare calls it an "irritant." Electronics calls it a "compatibility spec." Toys and baby products call it an "age-safety certification." The graph shape underneath all of them is identical: a product is composed of verifiable attributes, a buyer or a regulation states a constraint, and a hard traversal proves whether the two conflict before any AI is allowed to rank or write.
 
-SwapIQ builds that graph once per catalog and runs every downstream workflow off it: safe substitution when something goes out of stock, compliance auditing of every listing, safe discovery and search, recall propagation when an input turns out to be bad, and (planned) safe returns and exchanges. The defensible asset is the verified graph and the accumulated acceptance data it learns from, not the LLM, which is why the product is explicitly built to keep the safety decision deterministic and the graph backend swappable.
+SwapIQ builds that graph once per catalog and runs every downstream workflow off it: safe substitution when something goes out of stock, compliance auditing of every listing, safe discovery and search, recall propagation when an input turns out to be bad, and safe returns and exchanges. The defensible asset is the verified graph and the accumulated acceptance data it learns from, not the LLM, which is why the product is explicitly built to keep the safety decision deterministic and the graph backend swappable.
 
 **The strategic bet this version proves**: expansion should go *across categories within ecommerce* (grocery to skincare to electronics), not *out of ecommerce into a new industry* (grocery to pharma). Same buyer (an ecommerce platform or brand), same integration shape, same lifecycle, a materially larger addressable catalog. Section 3 below shows why that path was validated, not just proposed, this version: the skincare vertical was added as pure data with zero changes to the graph, ranking or compliance code.
 
@@ -29,7 +29,7 @@ SwapIQ is organized around the stages every ecommerce catalog passes through, no
 | 2. Compliance | ListingIQ | Audit every listing against category-appropriate rules, cite the violation, generate a compliant rewrite | Built for food (allergen declaration, false diet claims, FSSAI fields); generalized automatically to skincare with zero new rule code |
 | 3. Discovery | Safe Search | Filter the whole catalog to what is compatible with this specific buyer, not just what's in stock | Built: "safe for me" toggle, generalizes across verticals |
 | 4. Cart and fulfillment | SwapIQ substitution | Resolve a stockout with a safe, ranked, explained replacement | Built: graph safety filter, functional fit, nutrition (food) or skip (non-food), real per-store stock, certifications, brand affinity, business signals (margin/clearance, operator-only) |
-| 5. Post-purchase | Returns and exchange assistant | Suggest a safe, compatible alternative when a shopper returns an item, the same traversal as substitution, triggered by a return instead of a stockout | Planned this phase |
+| 5. Post-purchase | Returns and exchange assistant | Suggest a safe, compatible alternative when a shopper returns an item, the same traversal as substitution, triggered by a return instead of a stockout | Built: the return reason (reaction, dislike, quality, wrong item) becomes an added constraint that reshapes the safe set |
 | 6. Safety operations | Recall propagation | Trace one bad input (ingredient, material, component, batch) to every affected SKU, listing and at-risk buyer in one traversal | Built, live in the console |
 | 7. Insights | Console metrics | Report revenue recovered, listings protected, compliance issues caught, stock health, margin exposure, as evidence a buyer can show their own leadership | Built as a live snapshot; time-series trending is planned |
 
@@ -59,6 +59,8 @@ The initial buyer is a mid-market retailer or D2C brand, in food or beauty, that
 - A commerce-signals ranking layer above the safety graph: functional fit, nutrition (food only), real per-store stock (with a distinct "safe but unavailable" state), certifications, brand affinity, and operator-only business signals (margin, clearance).
 - Claude ranking and explanation with a deterministic fallback; margin and clearance are explicitly withheld from the shopper-facing prompt and reason text.
 - Accept/refund learning loop stored per browser session.
+- Post-purchase returns and exchange flow: the shopper picks a delivered item and a return reason, which becomes an added safety constraint, and the same engine proposes a safe exchange (`/api/return-offer`).
+- Optional LangSmith tracing/observability around the LLM ranking call, self-activating only when a LangSmith key is present.
 - Safe-for-me catalog filtering and cart-level safety audit.
 - ListingIQ audit library for allergens, claims, required fields, dietary marks and listing completeness, running automatically across both verticals.
 - AI-assisted compliant listing rewrite.
@@ -74,7 +76,6 @@ The initial buyer is a mid-market retailer or D2C brand, in food or beauty, that
 - Continuous marketplace policy synchronization.
 - Hosted Neo4j Aura credentials and production tenant data. The backend is implemented and locally validated; deployment still requires a managed database.
 - Human approval workflow, audit-log retention and regulatory certification.
-- Post-purchase returns/exchange assistant (Section 3, row 5).
 - A third vertical proving compatibility-shaped, not allergen-shaped, conflicts (Section 11).
 - Time-series trending for console insights (currently a live snapshot only).
 - A formally category-agnostic schema (today's generalization works because the field names, `ingredients`/`allergens`/`diet_tags`, happen to be reusable; a config-driven attribute schema is the more honest long-term version, see Section 11).
@@ -174,12 +175,14 @@ The expansion path is explicitly horizontal within ecommerce first: one graph, o
 | Neo4j silently falls back in production | `SWAPIQ_GRAPH_BACKEND=neo4j` fails startup unless Neo4j is reachable; `/api/health` exposes the active backend |
 | Cross-category generalization is coincidental, not structural | Section 11's schema-generalization work turns "the field names happen to reuse" into an explicit, config-driven attribute model |
 
-## 11. Roadmap: this phase
+## 11. Roadmap: next phase
 
-1. **Post-purchase returns and exchange assistant.** Reuse the substitution traversal, triggered by a return event instead of a stockout, to suggest a safe, compatible alternative rather than a bare refund. Closes the lifecycle loop in Section 3.
-2. **A third vertical proving compatibility, not allergen, conflicts.** Electronics or mobile accessories: a phone case or charger's "conflict" is a device/voltage/region mismatch, not an ingredient. This is the harder, more convincing proof, since it cannot reuse the ingredient-shaped mental model at all, it has to prove the underlying graph primitive (attribute, constraint, traversal) is genuinely general.
-3. **Schema generalization.** Promote the currently-implicit reuse (ingredients/allergens/diet_tags happening to work for skincare) into an explicit, config-driven attribute and conflict-class schema, so onboarding vertical four does not depend on another coincidence.
-4. **Console insights trending.** Move from a live snapshot to time-series metrics (acceptance rate over time, compliance issues resolved per week), the artifact an operator actually reports upward.
+Post-purchase returns and exchange (previously the first item here) has shipped and is now in Section 5. The remaining roadmap:
+
+1. **A third vertical proving compatibility, not allergen, conflicts.** Electronics or mobile accessories: a phone case or charger's "conflict" is a device/voltage/region mismatch, not an ingredient. This is the harder, more convincing proof, since it cannot reuse the ingredient-shaped mental model at all, it has to prove the underlying graph primitive (attribute, constraint, traversal) is genuinely general.
+2. **Schema generalization.** Promote the currently-implicit reuse (ingredients/allergens/diet_tags happening to work for skincare) into an explicit, config-driven attribute and conflict-class schema, so onboarding vertical four does not depend on another coincidence.
+3. **Console insights trending.** Move from a live snapshot to time-series metrics (acceptance rate over time, compliance issues resolved per week), the artifact an operator actually reports upward.
+4. **LangSmith guardrail evals.** A seeded dataset of stockout scenarios with automated checks that the model never recommends an item the graph did not clear and never leaks margin/cost to the shopper, turning the safety claim into a continuously measured metric.
 
 ## 12. Release acceptance criteria
 
@@ -190,6 +193,7 @@ The expansion path is explicitly horizontal within ecommerce first: one graph, o
 - The seeded hero journey shows the unsafe RAG cashew-milk recommendation, then a safe SwapIQ oat-milk replacement.
 - A second seeded journey (Meera, fragrance/sulfate allergy) shows the identical safety and ranking pipeline resolving a skincare stockout with zero code differences from the grocery path.
 - Accepting a substitute updates the cart and allows order completion.
+- A post-purchase returns flow resolves a returned item into a safe exchange, with the return reason applied as an extra constraint.
 - ListingIQ audits all 579 listings, across both verticals, and exposes detailed findings.
 - Console metrics, recall endpoint and graph explorer render without browser errors and reflect both verticals.
 - Neo4j and NetworkX return identical safe/blocked sets and graph counts in the backend contract tests.
@@ -198,6 +202,6 @@ The expansion path is explicitly horizontal within ecommerce first: one graph, o
 
 ### Planned for next version
 
-- A post-purchase returns/exchange flow with its own seeded journey.
 - A third, compatibility-shaped vertical with a seeded journey that does not rely on the ingredient/allergen mental model.
 - Console insights shown as a trend, not only a current snapshot.
+- LangSmith guardrail evals over a seeded scenario dataset.

@@ -6,7 +6,7 @@ Version 3.0 - July 2026
 
 ```text
 Customer browser
-  public/index.html       QuickCart storefront + SwapIQ checkout moment
+  public/index.html       Cartly storefront + SwapIQ checkout moment + returns
   public/qa.html          ListingIQ compliance test suite
   public/console.html     Operator console: integration, recall, graph explorer
         |
@@ -19,6 +19,7 @@ FastAPI API (api/index.py)
   +-- commerce_signals.py  ranking layer ABOVE the safety graph (fit, nutrition,
   |                         stock, certifications, brand, business economics)
   +-- agent.py             Claude ranking/explanation + deterministic fallback
+  |                         (optional LangSmith tracing of the LLM call)
   +-- listings.py          synthetic listing generator + compliance rule engine
         |
         +-- Neo4j: persistent production graph and Cypher safety traversal
@@ -39,9 +40,10 @@ Any factor whose failure is dangerous belongs in Layer 1. Any factor that only a
 ## 3. Runtime and deployment
 
 - Local: `python run_server.py` (honors `PORT`, defaults to 8020) or `uvicorn api.index:app --port 8000`.
-- Vercel: `vercel.json` rewrites `/api/*` to the `api/index.py` serverless function and maps `/`, `/qa.html`, `/console.html` to the static pages in `public/`. The `if not os.environ.get("VERCEL")` guard in `index.py` skips the local static mount in production, where Vercel serves the static files.
+- Vercel: `vercel.json` rewrites `/api/*` to the `api/index.py` serverless function and `/` to `/index.html`; `public/` is served at the site root, so `/qa.html` and `/console.html` resolve directly. The `if not os.environ.get("VERCEL")` guard in `index.py` skips the local static mount in production, where Vercel serves the static files. The live deployment is `swapiq-sneha-81s-projects.vercel.app`, auto-deploying from the `snehaguptagi/swapiq` GitHub repo on every push to `main`.
 - Graph backend selection (`SWAPIQ_GRAPH_BACKEND`): `neo4j` requires a reachable database and fails startup otherwise; `auto` (default) uses Neo4j when `NEO4J_URI` is set, else NetworkX; `networkx` forces the fallback. On Vercel with no database, leave it unset so it resolves to NetworkX.
 - `ANTHROPIC_API_KEY` enables Claude. Without it, the deterministic ranker and listing rewriter keep the same response shape.
+- `LANGSMITH_API_KEY` (optionally with `LANGSMITH_PROJECT`, default `swapiq`) turns on LangSmith tracing of the ranking call. With no key, tracing is a zero-overhead no-op and behavior is unchanged. Tracing is only meaningful when `ANTHROPIC_API_KEY` is also set, since the fallback ranker makes no LLM call.
 
 ## 4. Data model
 
@@ -128,6 +130,8 @@ This is the hard safety boundary. Blocked candidates never reach Layer 2 or the 
 
 `agent.rank_and_explain()` then sends the top safe-and-available candidates to `claude-opus-4-8` with a structured JSON schema and an explicit instruction never to mention margin, cost or clearance to the shopper. The deterministic fallback reproduces the same ordering and a templated reason when Claude is unavailable.
 
+**Observability.** When `LANGSMITH_API_KEY` is present, `rank_and_explain` is wrapped as a LangSmith trace (`swapiq.rank_and_explain`) with the Claude call nested inside via `wrap_anthropic`, capturing inputs, output, latency and which path ran (`claude` vs `fallback`). Traces are flushed before the serverless function returns, since Vercel may freeze the process between invocations. This is the single LLM touchpoint in the system, so one trace captures all model behavior; it is also where a guardrail eval (never recommend an item the graph did not clear, never leak margin/cost to the shopper) would attach.
+
 ## 8. Learning loop
 
 `updated_weight(old, accepted, lr=0.25)` uses bounded exponential updates:
@@ -160,6 +164,7 @@ Separates decision from language, the same principle as the two-layer model:
 | POST | `/api/rag-offer` | Similarity-only baseline recommendation (the A/B comparison) |
 | POST | `/api/safety-check` | Deterministic filtering; returns safe / blocked / unavailable counts, no LLM |
 | POST | `/api/swap-offer` | Safe candidates, Layer-2 signals, Claude ranking + explanation |
+| POST | `/api/return-offer` | Post-purchase: safe, ranked exchange for a returned item; the return reason becomes an added safety constraint |
 | POST | `/api/decide` | Pure learned-weight update |
 | POST | `/api/graph` | Product-centered nodes and edges for the canvas explorer |
 | GET | `/api/qa-summary` | Aggregate ListingIQ scores and issue counts |
@@ -173,9 +178,9 @@ Separates decision from language, the same principle as the two-layer model:
 
 ## 12. Frontend
 
-### QuickCart (`public/index.html`)
+### Cartly (`public/index.html`)
 
-One client state object holds shopper, engine mode (RAG vs SwapIQ), safe-only filter, cart, category, search, order and offer. It renders the multi-section home (banner, category tiles, per-category rails), category/search views, cart drawer, the pre-checkout substitution "moment" (customer phone on one side, the SwapIQ engine and ranking-factors panel on the other), checkout and confirmation. Category labels, colors, pack sizes and product icons all fall back gracefully, so new categories render without frontend changes.
+Cartly is a brand-neutral, multi-category storefront (grocery and beauty), deliberately not modeled on any one retailer. One client state object holds shopper, engine mode (RAG vs SwapIQ), safe-only filter, cart, category, search, order and offer. It renders the multi-section home (banner, category tiles, per-category rails), category/search views, cart drawer, the pre-checkout substitution "moment" (customer phone on one side, the SwapIQ engine and ranking-factors panel on the other), checkout and confirmation, and a post-purchase returns view. In returns, the shopper picks a delivered item and a reason (allergic reaction, disliked, quality issue, wrong item); the reason becomes an added safety constraint (a reaction infers and excludes the culprit conflict class, a dislike down-ranks the product/brand) and the same engine proposes a safe exchange. Category labels, colors, pack sizes and product icons all fall back gracefully, so new categories render without frontend changes. All three surfaces share one liquid-glass design system (frosted translucent surfaces over an ambient gradient background).
 
 ### ListingIQ (`public/qa.html`)
 
@@ -191,4 +196,4 @@ Operator front door: a simulated store-connection flow with a live-building grap
 
 ## 14. Planned (see PRD Section 11)
 
-Post-purchase returns/exchange (reusing the substitution traversal), a third compatibility-shaped vertical (electronics), an explicit config-driven attribute schema, and time-series console insights.
+A third compatibility-shaped vertical (electronics), an explicit config-driven attribute schema, and time-series console insights. (Post-purchase returns/exchange, previously listed here, has shipped and is documented in Sections 11 and 12.)
