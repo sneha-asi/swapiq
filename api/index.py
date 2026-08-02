@@ -480,21 +480,10 @@ def health():
             "products": len(catalog), "claude": claude_available()}
 
 
-# TEMP DEBUG: echo the exact path Vercel hands the function.
+# TEMP DEBUG: a true catch-all that reports the exact path the function receives.
 from fastapi import Request as _Req
 
-@app.get("/__whatpath/{_p:path}")
-async def _whatpath(_p: str, request: _Req):
+@app.api_route("/{full_path:path}", methods=["GET", "POST"])
+async def _catchall(full_path: str, request: _Req):
     return {"scope_path": request.scope.get("path"), "root_path": request.scope.get("root_path"),
-            "captured": _p, "url_path": request.url.path}
-
-@app.get("/api/__whatpath")
-@app.get("/__whatpath")
-async def _whatpath2(request: _Req):
-    return {"scope_path": request.scope.get("path"), "root_path": request.scope.get("root_path"),
-            "url_path": request.url.path}
-
-public_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "public")
-from fastapi.staticfiles import StaticFiles
-if os.path.isdir(public_dir):
-    app.mount("/", StaticFiles(directory=public_dir, html=True), name="static")
+            "captured": full_path, "url_path": request.url.path, "note": "debug-catchall"}
