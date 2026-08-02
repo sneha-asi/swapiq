@@ -480,26 +480,20 @@ def health():
             "products": len(catalog), "claude": claude_available()}
 
 
-# Vercel serves this file as a function under the /api directory and strips the
-# "/api" prefix before invoking it, so an "/api/health" request arrives here as
-# "/health" and would miss the "/api/health" route. Restore the prefix for API
-# paths (segments with no file extension). This is a no-op locally, where the
-# path already carries "/api", and it never touches "/" or static files such as
-# "/console.html" (which keep their extension and are served by the mount below).
-@app.middleware("http")
-async def _restore_api_prefix(request, call_next):
-    p = request.scope.get("path", "/")
-    if p != "/" and not p.startswith("/api") and "." not in p.rsplit("/", 1)[-1]:
-        newp = "/api" + p
-        request.scope["path"] = newp
-        request.scope["raw_path"] = newp.encode("utf-8")
-    return await call_next(request)
+# TEMP DEBUG: echo the exact path Vercel hands the function.
+from fastapi import Request as _Req
 
+@app.get("/__whatpath/{_p:path}")
+async def _whatpath(_p: str, request: _Req):
+    return {"scope_path": request.scope.get("path"), "root_path": request.scope.get("root_path"),
+            "captured": _p, "url_path": request.url.path}
 
-# Serve the frontend from FastAPI. On Vercel every non-static request is routed
-# to this function; the /api/* routes above take precedence and the mount below
-# serves index.html, console.html and qa.html. public/ is bundled via the
-# "includeFiles" config in vercel.json.
+@app.get("/api/__whatpath")
+@app.get("/__whatpath")
+async def _whatpath2(request: _Req):
+    return {"scope_path": request.scope.get("path"), "root_path": request.scope.get("root_path"),
+            "url_path": request.url.path}
+
 public_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "public")
 from fastapi.staticfiles import StaticFiles
 if os.path.isdir(public_dir):
