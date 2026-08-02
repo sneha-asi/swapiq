@@ -480,21 +480,13 @@ def health():
             "products": len(catalog), "claude": claude_available()}
 
 
-# Serve the frontend. Locally, mount the whole public/ directory. On Vercel the
-# CDN serves public/ via vercel.json rewrites, but on some projects the bare "/"
-# falls through to this function; serve the homepage explicitly so it always
-# works, independent of any platform routing quirk.
+# Serve the frontend from FastAPI itself. On Vercel every request is routed to
+# this function (vercel.json rewrites "/(.*)" -> "/api/index", which preserves
+# the original path), so the app owns both the API routes and the static pages.
+# The explicit /api/* routes above are registered first and take precedence; the
+# mount below serves index.html, console.html and qa.html for everything else.
+# public/ is bundled into the function via the "includeFiles" config.
 public_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "public")
-if not os.environ.get("VERCEL"):
-    from fastapi.staticfiles import StaticFiles
-    if os.path.isdir(public_dir):
-        app.mount("/", StaticFiles(directory=public_dir, html=True), name="static")
-else:
-    from fastapi.responses import FileResponse, RedirectResponse
-
-    @app.get("/")
-    def _serve_home():
-        index_path = os.path.join(public_dir, "index.html")
-        if os.path.isfile(index_path):
-            return FileResponse(index_path, media_type="text/html")
-        return RedirectResponse("/index.html")
+from fastapi.staticfiles import StaticFiles
+if os.path.isdir(public_dir):
+    app.mount("/", StaticFiles(directory=public_dir, html=True), name="static")
