@@ -480,10 +480,21 @@ def health():
             "products": len(catalog), "claude": claude_available()}
 
 
-# Local development only: serve the frontend. On Vercel, static files are
-# served by the platform and this block is skipped.
+# Serve the frontend. Locally, mount the whole public/ directory. On Vercel the
+# CDN serves public/ via vercel.json rewrites, but on some projects the bare "/"
+# falls through to this function; serve the homepage explicitly so it always
+# works, independent of any platform routing quirk.
+public_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "public")
 if not os.environ.get("VERCEL"):
     from fastapi.staticfiles import StaticFiles
-    public_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "public")
     if os.path.isdir(public_dir):
         app.mount("/", StaticFiles(directory=public_dir, html=True), name="static")
+else:
+    from fastapi.responses import FileResponse, RedirectResponse
+
+    @app.get("/")
+    def _serve_home():
+        index_path = os.path.join(public_dir, "index.html")
+        if os.path.isfile(index_path):
+            return FileResponse(index_path, media_type="text/html")
+        return RedirectResponse("/index.html")
