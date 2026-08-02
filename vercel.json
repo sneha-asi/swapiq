@@ -1,8 +1,5 @@
 {
-  "functions": {
-    "api/index.py": { "includeFiles": "public/**" }
-  },
   "rewrites": [
-    { "source": "/(.*)", "destination": "/api/index" }
+    { "source": "/api/(.*)", "destination": "/api/index?__vpath=$1" }
   ]
 }

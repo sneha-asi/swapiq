@@ -480,10 +480,24 @@ def health():
             "products": len(catalog), "claude": claude_available()}
 
 
-# TEMP DEBUG: a true catch-all that reports the exact path the function receives.
-from fastapi import Request as _Req
+# Vercel collapses the rewritten path to the destination ("/api/index") before
+# invoking this function, so the real endpoint cannot be read from the path.
+# vercel.json passes it instead as a "__vpath" query param (which the rewrite can
+# substitute with $1); reconstruct the real "/api/..." path from it here. No-op
+# locally, where requests arrive with their real path and no __vpath.
+@app.middleware("http")
+async def _restore_vercel_path(request, call_next):
+    vpath = request.query_params.get("__vpath")
+    if vpath is not None:
+        newp = "/api/" + vpath
+        request.scope["path"] = newp
+        request.scope["raw_path"] = newp.encode("utf-8")
+    return await call_next(request)
 
-@app.api_route("/{full_path:path}", methods=["GET", "POST"])
-async def _catchall(full_path: str, request: _Req):
-    return {"scope_path": request.scope.get("path"), "root_path": request.scope.get("root_path"),
-            "captured": full_path, "url_path": request.url.path, "note": "debug-catchall"}
+
+# Serve the frontend locally (uvicorn). On Vercel the static pages in public/ are
+# served by the CDN at the site root, so this mount is only exercised in local dev.
+public_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "public")
+from fastapi.staticfiles import StaticFiles
+if os.path.isdir(public_dir):
+    app.mount("/", StaticFiles(directory=public_dir, html=True), name="static")
