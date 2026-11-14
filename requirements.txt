@@ -2,5 +2,6 @@ fastapi
 networkx
 neo4j>=5.26,<7
 anthropic
+uvicorn
 langsmith
 pydantic

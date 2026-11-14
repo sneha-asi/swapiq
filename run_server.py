@@ -1,5 +1,5 @@
-"""Launcher that respects the harness-assigned PORT env var, falling back to
-8020 for manual runs (python run_server.py) outside the preview harness."""
+"""Launcher that respects the PORT env var when one is set (e.g. by a hosting
+or dev environment), falling back to 8020 for manual runs (python run_server.py)."""
 import os
 
 import uvicorn

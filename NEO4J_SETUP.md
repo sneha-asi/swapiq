@@ -4,35 +4,45 @@ SwapIQ has a real Neo4j runtime backend. When it is selected, safety filtering,
 swap weights, graph visualization, recall propagation and graph metrics query
 Neo4j. NetworkX remains an explicit zero-infrastructure fallback.
 
-Everything needed for local Neo4j testing is already on this machine.
-
-## What is already installed (on your Desktop, in the Claude folder)
-
-- `neo4j-community-5.26.0/` - Neo4j Community Edition 5.26 LTS
-- `jdk21/` - a portable Java 21 runtime (Neo4j needs Java; nothing to install)
-- `start-neo4j.bat` - one-click starter that wires the two together
-- The initial password is already set to `swapiq-demo`
+You need a running Neo4j 5.x instance (5.26 LTS is what the app was tested
+with). Either option below works.
 
 ## Step 1: Start Neo4j
 
-Double-click **`start-neo4j.bat`** on your Desktop (in the Claude folder), or in
-PowerShell from that folder:
+**Option A: Docker**
 
-```powershell
-$env:JAVA_HOME = "$PWD\jdk21\jdk-21.0.5+11"
-.\neo4j-community-5.26.0\bin\neo4j.bat console
+```bash
+docker run --name swapiq-neo4j -p 7474:7474 -p 7687:7687 \
+  -e NEO4J_AUTH=neo4j/<choose-a-password> neo4j:5.26
 ```
 
-Leave the window open. When you see "Started", the database is up:
-- Browser UI: http://localhost:7474  (login `neo4j` / `swapiq-demo`)
+**Option B: Neo4j Desktop**
+
+Install [Neo4j Desktop](https://neo4j.com/download/), create a local database
+on version 5.x, set a password and start it.
+
+When the database is up:
+- Browser UI: http://localhost:7474  (login `neo4j` / the password you chose)
 - Bolt endpoint: `bolt://localhost:7687`
 
-## Step 2: Load the SwapIQ catalog
+## Step 2: Set the connection variables
 
-In a second terminal, from `swapiq-site`:
+The loader and the API read these environment variables (bash shown; in
+PowerShell use `$env:NAME = "value"`):
 
-```powershell
-pip install neo4j
+```bash
+export NEO4J_URI="bolt://localhost:7687"
+export NEO4J_USER="neo4j"
+export NEO4J_PASSWORD="<your-password>"
+export NEO4J_DATABASE="neo4j"
+```
+
+## Step 3: Load the SwapIQ catalog
+
+From the repository root, in the same shell:
+
+```bash
+pip install -r requirements.txt
 python neo4j_loader.py --demo
 ```
 
@@ -49,30 +59,26 @@ What the graph blocks (nut-containing plant milks it will never offer):
   BLOCK ... Almond Milk ...
 ```
 
-## Step 3: Run the API on Neo4j
+## Step 4: Run the API on Neo4j
 
-In the same PowerShell session used to start the API:
+In the same shell:
 
-```powershell
-$env:SWAPIQ_GRAPH_BACKEND = "neo4j"
-$env:NEO4J_URI = "bolt://localhost:7687"
-$env:NEO4J_USER = "neo4j"
-$env:NEO4J_PASSWORD = "swapiq-demo"
-$env:NEO4J_DATABASE = "neo4j"
+```bash
+export SWAPIQ_GRAPH_BACKEND="neo4j"
 uvicorn api.index:app --reload --port 8000
 ```
 
 Verify the runtime rather than relying on configuration alone:
 
-```powershell
-Invoke-RestMethod http://localhost:8000/api/health
+```bash
+curl http://localhost:8000/api/health
 ```
 
 The response must contain `"backend": "neo4j"`, `"persistent": true` and
 `"connected": true`. Required Neo4j mode fails startup if the database is
 unavailable or empty; it never silently drops to NetworkX.
 
-## Step 4: See it in the Neo4j Browser
+## Step 5: See it in the Neo4j Browser
 
 Open http://localhost:7474 and run the safety traversal in Cypher. This is the
 exact logic from `graph_core.py`, now in the database:

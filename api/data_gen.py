@@ -428,7 +428,7 @@ def generate_catalog(seed=42):
 
 def generate_shoppers():
     return [
-        {"id": "S1", "name": "Sneha (nut allergy, vegan)",
+        {"id": "S1", "name": "Maya (nut allergy, vegan)",
          "avoids_allergens": ["tree_nuts", "peanuts"], "diet": ["vegan"], "budget_sensitive": False,
          "preferred_brand": "GreenLeaf"},
         {"id": "S2", "name": "Rahul (gluten free)",
