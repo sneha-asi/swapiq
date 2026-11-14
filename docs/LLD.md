@@ -83,7 +83,7 @@ The catalog spans **grocery** (508 SKUs, 24 categories) and **beauty/haircare** 
 ```json
 {
   "id": "S1",
-  "name": "Sneha (nut allergy, vegan)",
+  "name": "Maya (nut allergy, vegan)",
   "avoids_allergens": ["tree_nuts", "peanuts"],
   "diet": ["vegan"],
   "budget_sensitive": false,
